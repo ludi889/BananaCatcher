@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau
 
 from model import QNetwork
 
@@ -149,7 +149,7 @@ class Agent:
     qnetwork_local: QNetwork = None
     qnetwork_target: QNetwork = None
     optimizer: optim.Adam = None
-    lr_scheduler: ExponentialLR = None
+    lr_scheduler: ReduceLROnPlateau = None
     # Replay memory
     replay_memory: ReplayBuffer = ReplayBuffer()
     priority_hyperparameter: float = 0.5
@@ -160,8 +160,8 @@ class Agent:
     def __post_init__(self):
         self.qnetwork_local = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.qnetwork_target = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
-        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=5e-4)
-        self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9)
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters())
+        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
 
     def memorize(self, state, action, reward, next_state, done):
         """
@@ -227,22 +227,10 @@ class Agent:
             self.losses.append(float(loss))
             self.optimizer.step()
             # LR optimizer step
+            self.lr_scheduler.step(loss)
         # Copy parameters
         self.update_target_network()
-        try:
-            last_loss_mean = mean(self.losses[-self.decay_lr_mean_check:])
-            previous_loss_mean = mean(self.losses[-(2 * self.decay_lr_mean_check):-self.decay_lr_mean_check])
-            if not last_loss_mean < previous_loss_mean:
-                self.checks += 1
-                if self.checks > 9:
-                    print('Decaying LR')
-                    self.lr_scheduler.step()
-                    print(self.optimizer.param_groups[0]['lr'])
-                    self.checks = 0
-            else:
-                self.checks = 0
-        except (IndexError, statistics.StatisticsError):
-            pass
+
 
 
     def update_target_network(self, tau=0.1):
