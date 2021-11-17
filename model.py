@@ -16,13 +16,15 @@ class QNetwork(nn.Module, ABC):
             random seed for the networkd
     """
 
-    def __init__(self, state_size, action_size, seed, fc1_units=64, fc2_units=32, fc3_units=16):
+    def __init__(self, state_size, action_size, seed, fc1_units=128, fc2_units=64, fc3_units=32):
         super().__init__()
         self.seed = torch.manual_seed(seed)
         self.layers = nn.Sequential(
             nn.Linear(state_size, fc1_units),
+            nn.Dropout(0.2),
             nn.ReLU(),
             nn.Linear(fc1_units, fc2_units),
+            nn.Dropout(0.2),
             nn.ReLU(),
             nn.Linear(fc2_units, fc3_units),
             nn.ReLU(),

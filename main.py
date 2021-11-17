@@ -121,30 +121,35 @@ def evaluate_model(num_of_evaluated_episodes, state_for_evaluation):
 resolve_backup(agent)
 for episode in range(1, num_of_episodes):
     backup_and_hyperparameters_decay_step = 5  # forget every this step
-    epsilon = 1 - (episode/num_of_episodes)
+    epsilon = 1 - (episode / num_of_episodes)
     epsilon = max(0.05, epsilon)
     score = 0
-    check_model_eval = 100
-    if episode % backup_and_hyperparameters_decay_step == 0 and len(agent.replay_memory.memory_buffer) > 10000:
+    decay_lr = int(num_of_episodes/12)
+    if episode % backup_and_hyperparameters_decay_step == 0:
         '''
         Resolve parameters decays.
         
         Also resolve backup.
         '''
+        print('Decaying')
+        agent.replay_memory.forget(0.2)
+        agent.priority_hyperparameter = agent.priority_hyperparameter + (
+                (1 - agent.priority_hyperparameter) * (episode / num_of_episodes))
+    if episode % decay_lr == 0:
+        agent.lr_scheduler.step()
+        print(agent.lr_scheduler.get_lr())
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
         print('Saving.')
         plt.plot(scores)
         plt.ylabel('Score')
         plt.xlabel('Episode')
         plt.savefig('scores.png')
-        agent.replay_memory.forget(0.5)
-        agent.priority_hyperparameter = agent.priority_hyperparameter + (
-                (1 - agent.priority_hyperparameter) * (episode / num_of_episodes))
     while True:
         '''
         Resolve env info
         '''
-        epsilon *= 0.99
+        epsilon *= 0.95
+        epsilon = max(epsilon, 0.05)
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
         agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
         state = next_state
