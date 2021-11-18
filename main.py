@@ -124,7 +124,7 @@ for episode in range(1, num_of_episodes):
     epsilon = 1 - (episode / num_of_episodes)
     epsilon = max(0.05, epsilon)
     score = 0
-    decay_lr = int(num_of_episodes/12)
+    decay_lr = int(num_of_episodes/6)
     if episode % backup_and_hyperparameters_decay_step == 0:
         '''
         Resolve parameters decays.
@@ -136,7 +136,7 @@ for episode in range(1, num_of_episodes):
         agent.priority_hyperparameter = agent.priority_hyperparameter + (
                 (1 - agent.priority_hyperparameter) * (episode / num_of_episodes))
     if episode % decay_lr == 0:
-        agent.lr_scheduler.step()
+        #agent.lr_scheduler.step()
         print(agent.lr_scheduler.get_lr())
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
         print('Saving.')
@@ -148,7 +148,7 @@ for episode in range(1, num_of_episodes):
         '''
         Resolve env info
         '''
-        epsilon *= 0.95
+        epsilon *= 0.6
         epsilon = max(epsilon, 0.05)
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
         agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
