@@ -1,6 +1,5 @@
 import configparser
 import os
-import statistics
 from statistics import mean
 
 import matplotlib.pyplot as plt
@@ -56,7 +55,7 @@ def resolve_backup(agent):
 
 def evaluate_episode(episode_epsilon, episode_initial_state):
     """
-    Do episode of enviroment
+    Do episode of environment
     :param episode_epsilon: Epsilon for episode
     :param episode_initial_state: Initial state of episode
     :return: Tuple of agent state in episode - state,action,reward,next_state,done
@@ -119,12 +118,28 @@ def evaluate_model(num_of_evaluated_episodes, state_for_evaluation):
 
 # If saved model weights are found load them
 resolve_backup(agent)
+optimize_memories = False
+
+
+def learn_low_score_memories(agent, low_score_episode, revisions):
+    """
+    Re-learn low scoring memories from episode
+    :param agent: agent performing actions
+    :param low_score_episode: array of episodes to relearn
+    :param revisions: how many times memories should be relearn
+    """
+    for i in range(revisions):
+        for memory in low_score_episode:
+            agent.memorize(state=memory.state, action=memory.action, reward=memory.reward, next_state=memory.next_state, done = memory.done)
+
+
 for episode in range(1, num_of_episodes):
     backup_and_hyperparameters_decay_step = 5  # forget every this step
-    epsilon = 1 - (episode / num_of_episodes)
+    epsilon = 1 - ((episode / num_of_episodes) * 7)
     epsilon = max(0.05, epsilon)
     score = 0
-    decay_lr = int(num_of_episodes/6)
+    backup = int(num_of_episodes / 6)
+    episodes_memories = []
     if episode % backup_and_hyperparameters_decay_step == 0:
         '''
         Resolve parameters decays.
@@ -132,12 +147,11 @@ for episode in range(1, num_of_episodes):
         Also resolve backup.
         '''
         print('Decaying')
-        agent.replay_memory.forget(0.2)
+        if not optimize_memories:
+            agent.replay_memory.forget(0.2)
         agent.priority_hyperparameter = agent.priority_hyperparameter + (
                 (1 - agent.priority_hyperparameter) * (episode / num_of_episodes))
-    if episode % decay_lr == 0:
-        #agent.lr_scheduler.step()
-        print(agent.lr_scheduler.get_lr())
+    if episode % backup == 0:
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
         print('Saving.')
         plt.plot(scores)
@@ -148,14 +162,37 @@ for episode in range(1, num_of_episodes):
         '''
         Resolve env info
         '''
-        epsilon *= 0.6
+        epsilon *= 0.3
         epsilon = max(epsilon, 0.05)
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
-        agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
+        if optimize_memories:
+            memory = agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done,
+                                    skip_learn=True)
+        else:
+            memory = agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
+        # If we at the point
+        if optimize_memories:
+            episodes_memories.append(memory)
         state = next_state
         score += reward
+        if score > 13.0 and not optimize_memories:
+            print('Starting optimization.')
+            optimize_memories = True
         if done:  # exit loop if episode finished
             scores, over_13_counter = process_score(score, scores, over_13_counter)
+            # Fit model more strictly for low score memories if our mean is already 13 already
+            if optimize_memories and score < 13:
+                agent.replay_memory.forget(0.6)
+                revisions = 0
+                print('Fitting for low score memories.')
+                if 10 <= score < 13:
+                    revisions = 1
+                elif 5 <= score < 10:
+                    revisions = 2
+                elif score < 5:
+                    revisions = 3
+                print(f'{revisions} revisions.')
+                learn_low_score_memories(agent=agent, low_score_episode=episodes_memories, revisions=revisions)
             env.reset(train_mode=True)
             break
 env.close()
