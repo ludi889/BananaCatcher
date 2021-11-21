@@ -26,7 +26,7 @@ class QNetwork(nn.Module, ABC):
             nn.ReLU(),
             nn.Linear(fc2_units, fc3_units),
             nn.ReLU(),
-            nn.Linear(fc3_units, action_size)
+            nn.Linear(fc3_units, action_size),
         )
 
     def forward(self, state):

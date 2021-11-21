@@ -163,7 +163,7 @@ class Agent:
     def __post_init__(self):
         self.qnetwork_local = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.qnetwork_target = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
-        self.optimizer = optim.Adamax(self.qnetwork_local.parameters(), lr=5e-4)
+        self.optimizer = optim.Adamax(self.qnetwork_local.parameters())
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9)
 
     def memorize(self, state, action, reward, next_state, done):
