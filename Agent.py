@@ -166,7 +166,7 @@ class Agent:
         self.optimizer = optim.Adamax(self.qnetwork_local.parameters())
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9)
 
-    def memorize(self, state, action, reward, next_state, done):
+    def memorize(self, state, action, reward, next_state, done, skip_learn=False):
         """
         Add memories to the Replay Buffer
 
@@ -184,8 +184,9 @@ class Agent:
         """
         memory = Memory(state, action, reward, next_state, done)
         self.replay_memory.memory_buffer.append(memory)
-        if len(self.replay_memory.memory_buffer) % 10 == 0:
+        if len(self.replay_memory.memory_buffer) % 10 == 0 and not skip_learn:
             self.learn()
+        return memory
 
     def act(self, state, eps):
         """Get action basing on current state in the given policy state
@@ -215,15 +216,19 @@ class Agent:
             # Get expected Q values from local model
             Q_expected = self.qnetwork_local(memory.state).gather(0, memory.action).float()
 
-            # Count diff and assign it to single and total stack ranks for prioritizing
-            diff = abs(float(Q_target - Q_expected))
-            memory.stack_rank = diff
-            memory.used += 1
-            self.replay_memory.total_stack_rank += diff
+            # Count diff and assign it to single and total stack ranks for prioritizing, if memory was gotten normally.
+            # If we optimize the model for <13 scores, we skip memory buffer adjustment, to not disturb normal results
+            if memory.prob > 0:
+                diff = abs(float(Q_target - Q_expected))
+                memory.stack_rank = diff
+                memory.used += 1
+                self.replay_memory.total_stack_rank += diff
 
-            # Compute loss
-            sampling_weight = (1 / len(self.replay_memory.memory_buffer)) * (1 / memory.prob)
-            sampling_weight = pow(sampling_weight, self.priority_hyperparameter)
+                # Compute loss
+                sampling_weight = (1 / len(self.replay_memory.memory_buffer)) * (1 / memory.prob)
+                sampling_weight = pow(sampling_weight, self.priority_hyperparameter)
+            else:
+                sampling_weight = 1
             loss = sampling_weight * F.mse_loss(Q_expected, Q_target)
             # Minimize the loss
             self.optimizer.zero_grad()
