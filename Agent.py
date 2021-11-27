@@ -1,15 +1,13 @@
 import operator
 import random
-import statistics
 from dataclasses import dataclass, field
-from statistics import mean
 
 import numpy
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import ExponentialLR
 
 from model import QNetwork
 
@@ -151,11 +149,11 @@ class Agent:
     # Q-Network
     qnetwork_local: QNetwork = None
     qnetwork_target: QNetwork = None
-    optimizer: optim.Adamax = None
+    optimizer: optim.Adam = None
     lr_scheduler: ExponentialLR = None
     # Replay memory
     replay_memory: ReplayBuffer = ReplayBuffer()
-    priority_hyperparameter: float = 0.5
+    priority_hyperparameter: float = 0.4
     losses = []
     decay_lr_mean_check = 10
     checks = 0
@@ -163,8 +161,8 @@ class Agent:
     def __post_init__(self):
         self.qnetwork_local = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.qnetwork_target = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
-        self.optimizer = optim.Adamax(self.qnetwork_local.parameters())
-        self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9)
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters())
+        self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.95)
 
     def memorize(self, state, action, reward, next_state, done, skip_learn=False):
         """
@@ -234,9 +232,9 @@ class Agent:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+
             # LR optimizer step
         # Copy parameters
-        #self.lr_scheduler.step()
         self.update_target_network()
 
     def update_target_network(self, tau=0.1):

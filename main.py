@@ -35,7 +35,7 @@ env_info = env.reset(train_mode=True)[brain_name]  # reset the environment
 state = env_info.vector_observations[0]  # get the current state
 score = 0  # initialize the score
 agent = Agent(action_size=action_size, state_size=state_size, seed=42)  # Create agent object
-num_of_episodes = 3600  # Assume number of episodes
+num_of_episodes = 1800  # Assume number of episodes
 
 scores = []  # Scores array for plotting
 over_13_counter = 0  # Counter to check when the model will achieve score over 13 for 100 episodes
@@ -120,11 +120,15 @@ def evaluate_model(num_of_evaluated_episodes, state_for_evaluation):
 # If saved model weights are found load them
 resolve_backup(agent)
 for episode in range(1, num_of_episodes):
-    backup_and_hyperparameters_decay_step = 5  # forget every this step
-    epsilon = 1 - (episode*6 / num_of_episodes)
+    backup_and_hyperparameters_decay_step = 50  # forget every this step
+    epsilon = 1 - (episode * 2 / num_of_episodes)
     epsilon = max(0.05, epsilon)
+    if epsilon == 0.05:
+        decay_lr = 5
+    if epsilon > 0.05:
+        decay_lr = 20
+
     score = 0
-    decay_lr = 75
     if episode % backup_and_hyperparameters_decay_step == 0:
         '''
         Resolve parameters decays.
@@ -132,10 +136,10 @@ for episode in range(1, num_of_episodes):
         Also resolve backup.
         '''
         print('Decaying')
-        agent.replay_memory.forget(0.2)
-        agent.priority_hyperparameter = agent.priority_hyperparameter + (
-                (1 - agent.priority_hyperparameter) * (episode*6 / num_of_episodes))
-    if episode % decay_lr == 0 and episode > (num_of_episodes/4):
+        agent.replay_memory.forget(0.9)
+        agent.priority_hyperparameter = 0.4 + (0.6 * (episode / num_of_episodes))
+        print(agent.priority_hyperparameter)
+    if episode % decay_lr == 0:
         agent.lr_scheduler.step()
         print(agent.lr_scheduler.get_lr())
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
@@ -148,7 +152,7 @@ for episode in range(1, num_of_episodes):
         '''
         Resolve env info
         '''
-        epsilon *= 0.9
+        epsilon *= 0.99
         epsilon = max(epsilon, 0.05)
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
         agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
