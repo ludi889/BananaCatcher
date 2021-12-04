@@ -35,7 +35,7 @@ env_info = env.reset(train_mode=True)[brain_name]  # reset the environment
 state = env_info.vector_observations[0]  # get the current state
 score = 0  # initialize the score
 agent = Agent(action_size=action_size, state_size=state_size, seed=42)  # Create agent object
-num_of_episodes = 1800  # Assume number of episodes
+num_of_episodes = 1800 # Assume number of episodes
 
 scores = []  # Scores array for plotting
 over_13_counter = 0  # Counter to check when the model will achieve score over 13 for 100 episodes
@@ -117,17 +117,13 @@ def evaluate_model(num_of_evaluated_episodes, state_for_evaluation):
     print(f"Mean of evaluation of 10 episodes is {mean(eval_scores)}")
 
 
+decay_lr = 100
 # If saved model weights are found load them
 resolve_backup(agent)
 for episode in range(1, num_of_episodes):
-    backup_and_hyperparameters_decay_step = 50  # forget every this step
-    epsilon = 1 - (episode * 2 / num_of_episodes)
-    epsilon = max(0.05, epsilon)
-    if epsilon == 0.05:
-        decay_lr = 5
-    if epsilon > 0.05:
-        decay_lr = 20
-
+    backup_and_hyperparameters_decay_step = 5  # forget every this step
+    epsilon = 1 - (episode * 6 / num_of_episodes)
+    epsilon = max(0.01, epsilon)
     score = 0
     if episode % backup_and_hyperparameters_decay_step == 0:
         '''
@@ -136,29 +132,30 @@ for episode in range(1, num_of_episodes):
         Also resolve backup.
         '''
         print('Decaying')
-        agent.replay_memory.forget(0.9)
-        agent.priority_hyperparameter = 0.4 + (0.6 * (episode / num_of_episodes))
+        agent.replay_memory.forget(0.01)
+        agent.priority_hyperparameter = 0.6 + (0.4 * (episode / num_of_episodes))
         print(agent.priority_hyperparameter)
     if episode % decay_lr == 0:
-        agent.lr_scheduler.step()
-        print(agent.lr_scheduler.get_lr())
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
         print('Saving.')
         plt.plot(scores)
         plt.ylabel('Score')
         plt.xlabel('Episode')
         plt.savefig('scores.png')
+    if episode % decay_lr == 0 and episode/num_of_episodes > 0.5:
+        evaluate_model(100, state)
     while True:
         '''
         Resolve env info
         '''
         epsilon *= 0.99
-        epsilon = max(epsilon, 0.05)
+        epsilon = max(0.01, epsilon)
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
         agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
         state = next_state
         score += reward
         if done:  # exit loop if episode finished
+            agent.lr_scheduler.step(score)
             scores, over_13_counter = process_score(score, scores, over_13_counter)
             env.reset(train_mode=True)
             break
