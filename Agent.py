@@ -47,8 +47,8 @@ class ReplayBuffer:
         """
         self._recompute_stack_ranks(agent)
         self.memory_buffer = sorted(self.memory_buffer, key=operator.attrgetter("stack_rank"), reverse=True)
-        memories_to_experience = self.memory_buffer[:25]
-        self.memory_buffer = self.memory_buffer[25:]
+        memories_to_experience = self.memory_buffer[:10]
+        self.memory_buffer = self.memory_buffer[10:]
         return memories_to_experience
 
     def forget(self, rate_of_forget):
@@ -150,9 +150,9 @@ class Agent:
         self.qnetwork_local = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.qnetwork_target = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.optimizer = optim.Adamax(self.qnetwork_local.parameters())
-        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.9, patience=10)
+        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.9, patience=5)
 
-    def memorize(self, state, action, reward, next_state, done, skip_learn=False):
+    def memorize(self, state, action, reward, next_state, done):
         """
         Add memories to the Replay Buffer
 
@@ -170,7 +170,7 @@ class Agent:
         """
         memory = Memory(state, action, reward, next_state, done)
         self.replay_memory.memory_buffer.append(memory)
-        if len(self.replay_memory.memory_buffer) % 10 == 0 and len(self.replay_memory.memory_buffer) > 500:
+        if len(self.replay_memory.memory_buffer) % 10 == 0 and len(self.replay_memory.memory_buffer) > 100:
             self.learn()
         return memory
 
@@ -188,7 +188,7 @@ class Agent:
         else:
             return random.choice(np.arange(self.action_size))
 
-    def learn(self, gamma=0.9, memories_to_assume_diff=None):
+    def learn(self, gamma=0.995, memories_to_assume_diff=None):
         if not memories_to_assume_diff:
             memories = self.replay_memory.choose_memories(agent=self)
         else:
@@ -197,7 +197,7 @@ class Agent:
             # Get max predicted Q value (for next states) from target model Use Double DQNs method. If two Models
             # agree on action, take any of them. If they don't agree on the action, Choose lower value,
             # to not overestimate the reward.
-            Q_target_next = self._resolve_DQN_td_target(memory)
+            Q_target_next = self.resolve_DQN_td_target(memory)
 
             # Compute Q targets for current states
             Q_target = memory.reward + (gamma * Q_target_next * (1 - memory.done.float()))
@@ -236,7 +236,7 @@ class Agent:
         for target_param, local_param in zip(self.qnetwork_target.parameters(), self.qnetwork_local.parameters()):
             target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)
 
-    def _resolve_DQN_td_target(self, memory):
+    def resolve_DQN_td_target(self, memory):
         """
         Basing on DQN principle, resolve expected reward
 
