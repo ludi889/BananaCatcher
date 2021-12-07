@@ -30,7 +30,6 @@ class ReplayBuffer:
     """
     memory_buffer: [] = field(default_factory=list)
     total_stack_rank: float = 1.0
-    smoothing_factor = 1e-16
 
     def _recompute_stack_ranks(self, agent_to_check_diff):
         """
@@ -150,7 +149,7 @@ class Agent:
         self.qnetwork_local = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.qnetwork_target = QNetwork(self.state_size, self.action_size, self.seed).to(DEVICE)
         self.optimizer = optim.Adamax(self.qnetwork_local.parameters())
-        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.9, patience=5)
+        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.9, patience=20)
 
     def memorize(self, state, action, reward, next_state, done):
         """
@@ -188,7 +187,7 @@ class Agent:
         else:
             return random.choice(np.arange(self.action_size))
 
-    def learn(self, gamma=0.995, memories_to_assume_diff=None):
+    def learn(self, gamma=0.9, sampling_weight=1, memories_to_assume_diff=None):
         if not memories_to_assume_diff:
             memories = self.replay_memory.choose_memories(agent=self)
         else:
@@ -214,11 +213,11 @@ class Agent:
                 # Compute loss
                 sampling_weight = (1 / len(self.replay_memory.memory_buffer)) * (1 / memory.prob)
                 sampling_weight = pow(sampling_weight, self.priority_hyperparameter)
-                loss = sampling_weight * F.mse_loss(Q_expected, Q_target)
-                # Minimize the loss
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+            loss = sampling_weight * F.mse_loss(Q_expected, Q_target)
+            # Minimize the loss
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
             # LR optimizer step
         # Copy parameters
