@@ -5,6 +5,8 @@ from statistics import mean
 
 import matplotlib.pyplot as plt
 import torch
+from numpy import ndarray
+from torch import Tensor
 from unityagents import UnityEnvironment
 
 from Agent import Agent
@@ -35,13 +37,13 @@ env_info = env.reset(train_mode=True)[brain_name]  # reset the environment
 state = env_info.vector_observations[0]  # get the current state
 score = 0  # initialize the score
 agent = Agent(action_size=action_size, state_size=state_size, seed=42)  # Create agent object
-num_of_episodes = 7200  # Assume number of episodes
+num_of_episodes = 1800  # Assume number of episodes
 
 scores = []  # Scores array for plotting
 over_13_counter = 0  # Counter to check when the model will achieve score over 13 for 100 episodes
 
 
-def resolve_backup(agent):
+def resolve_backup(agent: Agent):
     """
     Resolve backup save and load of the model
 
@@ -54,7 +56,7 @@ def resolve_backup(agent):
         torch.save(agent.qnetwork_target.state_dict(), f"{model_weights_filename}_backup")
 
 
-def evaluate_episode(episode_epsilon, episode_initial_state):
+def evaluate_episode(episode_epsilon: float, episode_initial_state: ndarray) -> (ndarray, ndarray, ):
     """
     Do episode of enviroment
     :param episode_epsilon: Epsilon for episode
@@ -86,7 +88,7 @@ def process_score(score, scores, over_13_counter):
 
     if len(scores) > 101:
         print(f"Average scores of last 100 episodes {mean(scores[-100:])}")
-    print(f"Over 13 scores { over_13_counter}")
+    print(f"Over 13 scores {over_13_counter}")
     print(f"Score: {score} for episode {episode}")
     scores.append(score)
     return scores, over_13_counter
@@ -121,11 +123,12 @@ def evaluate_model(num_of_evaluated_episodes, state_for_evaluation):
 backup_step = 100
 # If saved model weights are found load them
 resolve_backup(agent)
+memory_id = 0
 for episode in range(1, num_of_episodes):
     action_counter = 0
     backup_and_hyperparameters_decay_step = 5  # forget every this step
-    epsilon = 1 - (episode * 36 / num_of_episodes)
-    epsilon = max(0.01, epsilon)
+    epsilon = 1 - (episode * 30 / num_of_episodes)
+    epsilon = max(0.05, epsilon)
     score = 0
     if episode % backup_and_hyperparameters_decay_step == 0:
         '''
@@ -134,8 +137,9 @@ for episode in range(1, num_of_episodes):
         Also resolve backup.
         '''
         print('Decaying')
-        agent.replay_memory.forget(0.01)
-        agent.priority_hyperparameter = 0.4 + (0.6 * (episode / num_of_episodes))
+        agent.replay_memory.remember(0.01)
+        agent.priority_hyperparameter_current = agent.priority_hyperparameter_initial + (
+                    (1 - agent.priority_hyperparameter_initial) * (episode / num_of_episodes))
     if episode % backup_step == 0:
         torch.save(agent.qnetwork_target.state_dict(), checkpoint_filename)
         print('Saving.')
@@ -145,16 +149,15 @@ for episode in range(1, num_of_episodes):
         plt.savefig('scores.png')
 
     while True:
-        action_counter +=1
         '''
         Resolve env info
         '''
-        epsilon *= 0.99
-        epsilon = max(epsilon, 0.01)
+        # Decay epsilon inside the episode to speed up the learning
         state, action, reward, next_state, done = evaluate_episode(epsilon, state)
-        agent.memorize(state=state, action=action, reward=reward, next_state=next_state, done=done)
+        agent.memorize(memory_id=memory_id, state=state, action=action, reward=reward, next_state=next_state, done=done)
         state = next_state
         score += reward
+        memory_id += 1
         if done:  # exit loop if episode finished
             agent.lr_scheduler.step(score)
             scores, over_13_counter = process_score(score, scores, over_13_counter)
